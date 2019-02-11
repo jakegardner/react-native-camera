@@ -7,6 +7,9 @@
 #import <React/RCTUtils.h>
 #import <React/UIView+React.h>
 #import  "RNSensorOrientationChecker.h"
+#import <FirebaseCore/FirebaseCore.h>
+#import <FirebaseMLVision/FirebaseMLVision.h>
+
 @interface RNCamera ()
 
 @property (nonatomic, weak) RCTBridge *bridge;
@@ -17,14 +20,17 @@
 @property (nonatomic, strong) RCTPromiseRejectBlock videoRecordedReject;
 @property (nonatomic, strong) id faceDetectorManager;
 @property (nonatomic, strong) id textDetector;
+@property (nonatomic, strong) id firebaseVisionDetector;
 
 @property (nonatomic, copy) RCTDirectEventBlock onCameraReady;
 @property (nonatomic, copy) RCTDirectEventBlock onMountError;
 @property (nonatomic, copy) RCTDirectEventBlock onBarCodeRead;
+@property (nonatomic, copy) RCTDirectEventBlock onFirebaseVisionBarcodesDetected;
 @property (nonatomic, copy) RCTDirectEventBlock onTextRecognized;
 @property (nonatomic, copy) RCTDirectEventBlock onFacesDetected;
 @property (nonatomic, copy) RCTDirectEventBlock onPictureSaved;
 @property (nonatomic, assign) BOOL finishedReadingText;
+@property (nonatomic, assign) BOOL finishedDetectingBarcode;
 @property (nonatomic, copy) NSDate *start;
 
 @end
@@ -40,8 +46,8 @@ static NSDictionary *defaultFaceDetectorOptions = nil;
         self.session = [AVCaptureSession new];
         self.sessionQueue = dispatch_queue_create("cameraQueue", DISPATCH_QUEUE_SERIAL);
         self.sensorOrientationChecker = [RNSensorOrientationChecker new];
-        self.textDetector = [self createTextDetector];
         self.finishedReadingText = true;
+        self.finishedDetectingBarcode = true;
         self.start = [NSDate date];
         self.faceDetectorManager = [self createFaceDetectorManager];
 #if !(TARGET_IPHONE_SIMULATOR)
@@ -91,6 +97,15 @@ static NSDictionary *defaultFaceDetectorOptions = nil;
 {
     if (_onBarCodeRead) {
         _onBarCodeRead(event);
+    }
+}
+
+- (void)onFirebaseBarCodeRead:(NSDictionary *)event
+{
+    if (_onFirebaseVisionBarcodesDetected) {
+        _onFirebaseVisionBarcodesDetected(event);
+    } else {
+        NSLog(@"onFirebaseVisionBarcodesDetected handler not specified");
     }
 }
 
@@ -506,7 +521,7 @@ static NSDictionary *defaultFaceDetectorOptions = nil;
         // We stop face detection here and restart it in when AVCaptureMovieFileOutput finishes recording.
 #if __has_include(<GoogleMobileVision/GoogleMobileVision.h>)
         [_faceDetectorManager stopFaceDetection];
-        [self stopTextRecognition];
+        [self stopVideoOutput];
 #endif
         [self setupMovieFileCapture];
     }
@@ -627,7 +642,7 @@ static NSDictionary *defaultFaceDetectorOptions = nil;
 
 #if __has_include(<GoogleMobileVision/GoogleMobileVision.h>)
         [_faceDetectorManager maybeStartFaceDetectionOnSession:_session withPreviewLayer:_previewLayer];
-        if ([self.textDetector isRealDetector]) {
+        if ([self canReadText]) {
             [self setupOrDisableTextDetector];
         }
 #else
@@ -637,6 +652,10 @@ static NSDictionary *defaultFaceDetectorOptions = nil;
         // frames of the recorded output to be underexposed.
         [self setupMovieFileCapture];
 #endif
+        if ([self isDetectingBarCodes]) {
+            [self setupOrDisableFirebaseVision];
+        }
+
         [self setupOrDisableBarcodeScanner];
 
         __weak RNCamera *weakSelf = self;
@@ -665,8 +684,8 @@ static NSDictionary *defaultFaceDetectorOptions = nil;
 #if __has_include(<GoogleMobileVision/GoogleMobileVision.h>)
         [_faceDetectorManager stopFaceDetection];
 #endif
-        if ([self.textDetector isRealDetector]) {
-            [self stopTextRecognition];
+        if ([self.textDetector isRealDetector] || [self isDetectingBarCodes]) {
+            [self stopVideoOutput];
         }
         [self.previewLayer removeFromSuperlayer];
         [self.session commitConfiguration];
@@ -971,7 +990,7 @@ static NSDictionary *defaultFaceDetectorOptions = nil;
         void (^resolveBlock)(void) = ^() {
             self.videoRecordedResolve(result);
         };
-        
+
         result[@"uri"] = outputFileURL.absoluteString;
         result[@"videoOrientation"] = @([self.orientation integerValue]);
         result[@"deviceOrientation"] = @([self.deviceOrientation integerValue]);
@@ -1019,7 +1038,7 @@ static NSDictionary *defaultFaceDetectorOptions = nil;
 
     if ([self.textDetector isRealDetector]) {
         [self cleanupMovieFileCapture];
-        [self setupOrDisableTextDetector];
+        [self setupVideoOutput];
     }
 
     AVCaptureSessionPreset preset = [RNCameraUtils captureSessionPresetForVideoResolution:[self defaultVideoQuality]];
@@ -1119,32 +1138,70 @@ static NSDictionary *defaultFaceDetectorOptions = nil;
     return nil;
 }
 
+-(id)createFirebaseVisionDetector
+{
+    FIRVisionBarcodeDetectorOptions *options =
+    [[FIRVisionBarcodeDetectorOptions alloc]
+     initWithFormats: FIRVisionBarcodeFormatCode39];
+
+    FIRVision *vision = [FIRVision vision];
+    FIRVisionBarcodeDetector *barcodeDetector = [vision barcodeDetectorWithOptions:options];
+
+    return barcodeDetector;
+}
+
 - (void)setupOrDisableTextDetector
 {
-    if ([self canReadText] && [self.textDetector isRealDetector]){
-        self.videoDataOutput = [[AVCaptureVideoDataOutput alloc] init];
-        if (![self.session canAddOutput:_videoDataOutput]) {
-            NSLog(@"Failed to setup video data output");
-            [self stopTextRecognition];
-            return;
-        }
-        NSDictionary *rgbOutputSettings = [NSDictionary
-            dictionaryWithObject:[NSNumber numberWithInt:kCMPixelFormat_32BGRA]
-                            forKey:(id)kCVPixelBufferPixelFormatTypeKey];
-        [self.videoDataOutput setVideoSettings:rgbOutputSettings];
-        [self.videoDataOutput setAlwaysDiscardsLateVideoFrames:YES];
-        [self.videoDataOutput setSampleBufferDelegate:self queue:self.sessionQueue];
-        [self.session addOutput:_videoDataOutput];
-    } else {
-        [self stopTextRecognition];
+    if ([self canReadText]) {
+        self.textDetector = [self createTextDetector];
+        [self setupVideoOutput];
     }
+}
+
+- (void)setupOrDisableFirebaseVision
+{
+    if ([self isDetectingBarCodes]) {
+        self.firebaseVisionDetector = [self createFirebaseVisionDetector];
+        [self setupVideoOutput];
+    }
+}
+
+- (void)setupVideoOutput
+{
+    if (self.videoDataOutput) {
+        return;
+    }
+    self.videoDataOutput = [[AVCaptureVideoDataOutput alloc] init];
+    if (![self.session canAddOutput:_videoDataOutput]) {
+        NSLog(@"Failed to setup video data output");
+        [self stopVideoOutput];
+        return;
+    }
+    NSDictionary *rgbOutputSettings = [NSDictionary
+        dictionaryWithObject:[NSNumber numberWithInt:kCMPixelFormat_32BGRA]
+                        forKey:(id)kCVPixelBufferPixelFormatTypeKey];
+    [self.videoDataOutput setVideoSettings:rgbOutputSettings];
+    [self.videoDataOutput setAlwaysDiscardsLateVideoFrames:YES];
+    [self.videoDataOutput setSampleBufferDelegate:self queue:self.sessionQueue];
+    [self.session addOutput:_videoDataOutput];
 }
 
 - (void)captureOutput:(AVCaptureOutput *)captureOutput
     didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
            fromConnection:(AVCaptureConnection *)connection
 {
-    if (![self.textDetector isRealDetector]) {
+    if ([self.textDetector isRealDetector] ) {
+        [self runTextDetector:sampleBuffer];
+    }
+
+    if (self.firebaseVisionDetector) {
+        [self runFirebaseVisionDetector:sampleBuffer];
+    }
+}
+
+- (void)runTextDetector:(CMSampleBufferRef)sampleBuffer
+{
+    if (![self.textDetector isRealDetector] ) {
         return;
     }
 
@@ -1172,10 +1229,52 @@ static NSDictionary *defaultFaceDetectorOptions = nil;
     }
 }
 
-- (void)stopTextRecognition
+- (void)runFirebaseVisionDetector:(CMSampleBufferRef)sampleBuffer
+{
+    if (![self isDetectingBarCodes]) {
+        return;
+    }
+
+    // Do not submit image for barcode recognition too often:
+    // 1. we only dispatch events every 500ms anyway
+    // 2. wait until previous recognition is finished
+    NSDate *methodFinish = [NSDate date];
+    NSTimeInterval timePassed = [methodFinish timeIntervalSinceDate:self.start];
+    bool shouldRunDetector = timePassed > 0.5 && self.finishedDetectingBarcode && [self isDetectingBarCodes];
+    if (shouldRunDetector) {
+        CGSize previewSize = CGSizeMake(_previewLayer.frame.size.width, _previewLayer.frame.size.height);
+        UIImage *uiImage = [RNCameraUtils convertBufferToUIImage:sampleBuffer previewSize:previewSize];
+        
+        self.finishedDetectingBarcode = false;
+
+        FIRVisionImage *visionImage = [[FIRVisionImage alloc] initWithImage:uiImage];
+        [self.firebaseVisionDetector detectInImage:visionImage
+            completion:^(NSArray<FIRVisionBarcode *> *barcodes,
+                         NSError *error) {
+                if (barcodes != nil && barcodes.count > 0) {
+                    NSMutableArray *results = [[NSMutableArray alloc] init];
+                    for (FIRVisionBarcode *barcode in barcodes) {
+                        NSMutableDictionary *detected = [NSMutableDictionary dictionaryWithDictionary:@{
+                            @"type" : @"barcode",
+                            @"data": barcode.rawValue
+                            }];
+                        [results addObject:detected];
+                    }
+                    NSMutableDictionary *event = [NSMutableDictionary dictionaryWithDictionary:@{
+                         @"type" : @"barcode",
+                         @"barcodes": results
+                         }];
+                    [self onFirebaseBarCodeRead:event];
+                }
+                self.finishedDetectingBarcode = true;
+            }];
+    }
+}
+
+- (void)stopVideoOutput
 {
     if (self.videoDataOutput) {
-    [self.session removeOutput:self.videoDataOutput];
+        [self.session removeOutput:self.videoDataOutput];
     }
     self.videoDataOutput = nil;
 }

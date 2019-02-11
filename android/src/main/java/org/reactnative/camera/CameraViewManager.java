@@ -8,10 +8,13 @@ import com.facebook.react.uimanager.ViewGroupManager;
 import com.facebook.react.uimanager.annotations.ReactProp;
 import com.google.android.cameraview.AspectRatio;
 import com.google.android.cameraview.Size;
+import com.google.firebase.ml.vision.barcode.FirebaseVisionBarcode;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+
+import static org.reactnative.camera.CameraModule.VALID_FIREBASE_BARCODE_TYPES;
 
 public class CameraViewManager extends ViewGroupManager<RNCameraView> {
   public enum Events {
@@ -20,8 +23,10 @@ public class CameraViewManager extends ViewGroupManager<RNCameraView> {
     EVENT_ON_BAR_CODE_READ("onBarCodeRead"),
     EVENT_ON_FACES_DETECTED("onFacesDetected"),
     EVENT_ON_BARCODES_DETECTED("onGoogleVisionBarcodesDetected"),
+    EVENT_ON_FIREBASE_BARCODES_DETECTED("onFirebaseVisionBarcodesDetected"),
     EVENT_ON_FACE_DETECTION_ERROR("onFaceDetectionError"),
     EVENT_ON_BARCODE_DETECTION_ERROR("onGoogleVisionBarcodeDetectionError"),
+    EVENT_ON_FIREBASE_BARCODE_DETECTION_ERROR("onFirebaseVisionBarcodeDetectionError"),
     EVENT_ON_TEXT_RECOGNIZED("onTextRecognized"),
     EVENT_ON_PICTURE_TAKEN("onPictureTaken"),
     EVENT_ON_PICTURE_SAVED("onPictureSaved");
@@ -167,6 +172,24 @@ public class CameraViewManager extends ViewGroupManager<RNCameraView> {
   @ReactProp(name = "googleVisionBarcodeMode")
   public void setGoogleVisionBarcodeMode(RNCameraView view, int barcodeMode) {
     view.setGoogleVisionBarcodeMode(barcodeMode);
+  }
+
+  @ReactProp(name = "firebaseVisionBarcodeDetectorEnabled")
+  public void setFirebaseVisionBarcodeDetecting(RNCameraView view, boolean firebaseVisionBarcodeDetectorEnabled) {
+    view.setShouldFirebaseVisionDetectBarcodes(firebaseVisionBarcodeDetectorEnabled);
+  }
+
+  @ReactProp(name = "firebaseBarCodeTypes")
+  public void setFirebaseBarCodeTypes(RNCameraView view, ReadableArray barCodeTypes) {
+    if (barCodeTypes == null) {
+      return;
+    }
+    int numberOfFormats = barCodeTypes.size();
+    List<Integer> result = new ArrayList<>(numberOfFormats);
+    for (int i = 0; i < numberOfFormats; i++) {
+      result.add(barCodeTypes.getInt(i));
+    }
+    view.setFirebaseBarCodeTypes(result);
   }
 
   @ReactProp(name = "textRecognizerEnabled")

@@ -3,15 +3,13 @@ package org.reactnative.camera;
 import android.Manifest;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
-import android.util.Log;
-import android.widget.Toast;
 
 import com.facebook.react.bridge.*;
-import com.facebook.react.common.build.ReactBuildConfig;
 import com.facebook.react.uimanager.NativeViewHierarchyManager;
 import com.facebook.react.uimanager.UIBlock;
 import com.facebook.react.uimanager.UIManagerModule;
 import com.google.android.cameraview.AspectRatio;
+import com.google.firebase.ml.vision.barcode.FirebaseVisionBarcode;
 import com.google.zxing.BarcodeFormat;
 import org.reactnative.barcodedetector.BarcodeFormatUtils;
 import org.reactnative.camera.utils.ScopedContext;
@@ -63,6 +61,26 @@ public class CameraModule extends ReactContextBaseJavaModule {
         }
       });
 
+    public static final Map<String, Integer> VALID_FIREBASE_BARCODE_TYPES =
+            Collections.unmodifiableMap(new HashMap<String, Integer>() {
+                {
+                    put("aztec", FirebaseVisionBarcode.FORMAT_AZTEC);
+                    put("ean13", FirebaseVisionBarcode.FORMAT_EAN_13);
+                    put("ean8", FirebaseVisionBarcode.FORMAT_EAN_8);
+                    put("qr", FirebaseVisionBarcode.FORMAT_QR_CODE);
+                    put("pdf417", FirebaseVisionBarcode.FORMAT_PDF417);
+                    put("upc_e", FirebaseVisionBarcode.FORMAT_UPC_E);
+                    put("datamatrix", FirebaseVisionBarcode.FORMAT_DATA_MATRIX);
+                    put("code39", FirebaseVisionBarcode.FORMAT_CODE_39);
+                    put("code93", FirebaseVisionBarcode.FORMAT_CODE_93);
+                    put("interleaved2of5", FirebaseVisionBarcode.FORMAT_ITF);
+                    put("codabar", FirebaseVisionBarcode.FORMAT_CODABAR);
+                    put("code128", FirebaseVisionBarcode.FORMAT_CODE_128);
+                    put("upc_a", FirebaseVisionBarcode.FORMAT_UPC_A);
+                    put("upc_ean", FirebaseVisionBarcode.FORMAT_UPC_E);
+                }
+            });
+
   public CameraModule(ReactApplicationContext reactContext) {
     super(reactContext);
     mScopedContext = new ScopedContext(reactContext);
@@ -88,6 +106,7 @@ public class CameraModule extends ReactContextBaseJavaModule {
         put("WhiteBalance", getWhiteBalanceConstants());
         put("VideoQuality", getVideoQualityConstants());
         put("BarCodeType", getBarCodeConstants());
+        put("FirebaseBarCodeType", VALID_FIREBASE_BARCODE_TYPES);
         put("FaceDetection", Collections.unmodifiableMap(new HashMap<String, Object>() {
           {
             put("Mode", getFaceDetectionModeConstants());

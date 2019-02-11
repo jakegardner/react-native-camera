@@ -35,6 +35,17 @@ Pod::Spec.new do |s|
     s.static_framework = true
   end
 
+  s.subspec "FirebaseVisionDetector" do |ss|
+    ss.dependency 'react-native-camera/RN'
+    ss.dependency 'react-native-camera/RCT'
+
+    ss.dependency 'Firebase/Core'
+    ss.dependency 'Firebase/MLVision'
+    ss.dependency 'Firebase/MLVisionBarcodeModel'
+
+    s.static_framework = true
+  end
+
   s.subspec "TextDetector" do |ss|
     ss.dependency 'react-native-camera/RN'
     ss.dependency 'react-native-camera/RCT'

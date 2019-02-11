@@ -29,6 +29,7 @@
 @property(nonatomic, strong) id runtimeErrorHandlingObserver;
 @property(nonatomic, strong) AVCaptureVideoPreviewLayer *previewLayer;
 @property(nonatomic, strong) NSArray *barCodeTypes;
+@property(nonatomic, strong) NSArray *firebaseBarCodeTypes;
 
 @property(nonatomic, assign) NSInteger presetCamera;
 @property (assign, nonatomic) NSInteger flashMode;
@@ -39,6 +40,7 @@
 @property (assign, nonatomic) NSInteger whiteBalance;
 @property (assign, nonatomic) AVCaptureSessionPreset pictureSize;
 @property (nonatomic, assign) BOOL isReadingBarCodes;
+@property (nonatomic, assign) BOOL isDetectingBarCodes;
 @property (nonatomic, assign) BOOL isDetectingFaces;
 @property (nonatomic, assign) BOOL canReadText;
 @property(assign, nonatomic) AVVideoCodecType videoCodecType;
@@ -69,9 +71,14 @@
 - (void)pausePreview;
 - (void)setupOrDisableBarcodeScanner;
 - (void)setupOrDisableTextDetector;
+- (void)setupOrDisableFirebaseVision;
+- (void)setupVideoOutput;
+- (void)runTextDetector:(CMSampleBufferRef)sampleBuffer;
+- (void)runFirebaseVisionDetector:(CMSampleBufferRef)sampleBuffer;
 - (void)onReady:(NSDictionary *)event;
 - (void)onMountingError:(NSDictionary *)event;
 - (void)onCodeRead:(NSDictionary *)event;
+- (void)onFirebaseBarCodeRead:(NSDictionary *)event;
 - (void)onFacesDetected:(NSDictionary *)event;
 - (void)onPictureSaved:(NSDictionary *)event;
 - (void)onText:(NSDictionary *)event;

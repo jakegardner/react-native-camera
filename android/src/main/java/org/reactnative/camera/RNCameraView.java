@@ -18,6 +18,10 @@ import com.google.android.gms.vision.barcode.Barcode;
 import com.google.android.gms.vision.face.Face;
 import com.google.android.gms.vision.text.TextBlock;
 import com.google.android.gms.vision.text.TextRecognizer;
+import com.google.firebase.ml.vision.FirebaseVision;
+import com.google.firebase.ml.vision.barcode.FirebaseVisionBarcode;
+import com.google.firebase.ml.vision.barcode.FirebaseVisionBarcodeDetector;
+import com.google.firebase.ml.vision.barcode.FirebaseVisionBarcodeDetectorOptions;
 import com.google.zxing.BarcodeFormat;
 import com.google.zxing.DecodeHintType;
 import com.google.zxing.MultiFormatReader;
@@ -35,7 +39,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class RNCameraView extends CameraView implements LifecycleEventListener, BarCodeScannerAsyncTaskDelegate, FaceDetectorAsyncTaskDelegate,
-    BarcodeDetectorAsyncTaskDelegate, TextRecognizerAsyncTaskDelegate, PictureSavedDelegate {
+    BarcodeDetectorAsyncTaskDelegate, FirebaseVisionDetectorAsyncTaskDelegate, TextRecognizerAsyncTaskDelegate, PictureSavedDelegate {
   private ThemedReactContext mThemedReactContext;
   private Queue<Promise> mPictureTakenPromises = new ConcurrentLinkedQueue<>();
   private Map<Promise, ReadableMap> mPictureTakenOptions = new ConcurrentHashMap<>();
@@ -52,15 +56,18 @@ public class RNCameraView extends CameraView implements LifecycleEventListener, 
   public volatile boolean barCodeScannerTaskLock = false;
   public volatile boolean faceDetectorTaskLock = false;
   public volatile boolean googleBarcodeDetectorTaskLock = false;
+  public volatile boolean firebaseVisionBarcodeDetectorTaskLock = false;
   public volatile boolean textRecognizerTaskLock = false;
 
   // Scanning-related properties
   private MultiFormatReader mMultiFormatReader;
   private RNFaceDetector mFaceDetector;
   private RNBarcodeDetector mGoogleBarcodeDetector;
+  private FirebaseVisionBarcodeDetector mFirebaseVisionBarcodeDetector;
   private TextRecognizer mTextRecognizer;
   private boolean mShouldDetectFaces = false;
   private boolean mShouldGoogleDetectBarcodes = false;
+  private boolean mShouldFirebaseVisionDetectBarcodes = false;
   private boolean mShouldScanBarCodes = false;
   private boolean mShouldRecognizeText = false;
   private int mFaceDetectorMode = RNFaceDetector.FAST_MODE;
@@ -68,6 +75,7 @@ public class RNCameraView extends CameraView implements LifecycleEventListener, 
   private int mFaceDetectionClassifications = RNFaceDetector.NO_CLASSIFICATIONS;
   private int mGoogleVisionBarCodeType = Barcode.ALL_FORMATS;
   private int mGoogleVisionBarCodeMode = RNBarcodeDetector.NORMAL_MODE;
+  private List<Integer> mFirebaseBarCodeTypes = new ArrayList<> ();
 
   public RNCameraView(ThemedReactContext themedReactContext) {
     super(themedReactContext, true);
@@ -125,8 +133,9 @@ public class RNCameraView extends CameraView implements LifecycleEventListener, 
         boolean willCallBarCodeTask = mShouldScanBarCodes && !barCodeScannerTaskLock && cameraView instanceof BarCodeScannerAsyncTaskDelegate;
         boolean willCallFaceTask = mShouldDetectFaces && !faceDetectorTaskLock && cameraView instanceof FaceDetectorAsyncTaskDelegate;
         boolean willCallGoogleBarcodeTask = mShouldGoogleDetectBarcodes && !googleBarcodeDetectorTaskLock && cameraView instanceof BarcodeDetectorAsyncTaskDelegate;
+        boolean willCallFirebaseVisionBarcodeTask = mShouldFirebaseVisionDetectBarcodes && !firebaseVisionBarcodeDetectorTaskLock && cameraView instanceof FirebaseVisionDetectorAsyncTaskDelegate;
         boolean willCallTextTask = mShouldRecognizeText && !textRecognizerTaskLock && cameraView instanceof TextRecognizerAsyncTaskDelegate;
-        if (!willCallBarCodeTask && !willCallFaceTask && !willCallGoogleBarcodeTask && !willCallTextTask) {
+        if (!willCallBarCodeTask && !willCallFaceTask && !willCallGoogleBarcodeTask && !willCallFirebaseVisionBarcodeTask && !willCallTextTask) {
           return;
         }
 
@@ -162,6 +171,12 @@ public class RNCameraView extends CameraView implements LifecycleEventListener, 
           }
           BarcodeDetectorAsyncTaskDelegate delegate = (BarcodeDetectorAsyncTaskDelegate) cameraView;
           new BarcodeDetectorAsyncTask(delegate, mGoogleBarcodeDetector, data, width, height, correctRotation).execute();
+        }
+
+        if (willCallFirebaseVisionBarcodeTask) {
+          firebaseVisionBarcodeDetectorTaskLock = true;
+          FirebaseVisionDetectorAsyncTaskDelegate delegate = (FirebaseVisionDetectorAsyncTaskDelegate) cameraView;
+          new FirebaseVisionDetectorAsyncTask(delegate, mFirebaseVisionBarcodeDetector, data, width, height, correctRotation).execute();
         }
 
         if (willCallTextTask) {
@@ -308,7 +323,7 @@ public class RNCameraView extends CameraView implements LifecycleEventListener, 
       initBarcodeReader();
     }
     this.mShouldScanBarCodes = shouldScanBarCodes;
-    setScanning(mShouldDetectFaces || mShouldGoogleDetectBarcodes || mShouldScanBarCodes || mShouldRecognizeText);
+    setScanning(mShouldDetectFaces || mShouldGoogleDetectBarcodes || mShouldFirebaseVisionDetectBarcodes || mShouldScanBarCodes || mShouldRecognizeText);
   }
 
   public void onBarCodeRead(Result barCode, int width, int height) {
@@ -372,7 +387,19 @@ public class RNCameraView extends CameraView implements LifecycleEventListener, 
       setupBarcodeDetector();
     }
     this.mShouldGoogleDetectBarcodes = shouldDetectBarcodes;
-    setScanning(mShouldDetectFaces || mShouldGoogleDetectBarcodes || mShouldScanBarCodes || mShouldRecognizeText);
+    setScanning(mShouldDetectFaces || mShouldGoogleDetectBarcodes || mShouldFirebaseVisionDetectBarcodes || mShouldScanBarCodes || mShouldRecognizeText);
+  }
+
+  public void setFirebaseBarCodeTypes(List<Integer> barCodeTypes) {
+    mFirebaseBarCodeTypes = barCodeTypes;
+  }
+
+  public void setShouldFirebaseVisionDetectBarcodes(boolean shouldDetectBarcodes) {
+    if (shouldDetectBarcodes && mFirebaseVisionBarcodeDetector == null) {
+      setupFirebaseVisionBarcodeDetector();
+    }
+    this.mShouldFirebaseVisionDetectBarcodes = shouldDetectBarcodes;
+    setScanning(mShouldDetectFaces || mShouldGoogleDetectBarcodes || mShouldFirebaseVisionDetectBarcodes || mShouldScanBarCodes || mShouldRecognizeText);
   }
 
   public void onFacesDetected(SparseArray<Face> facesReported, int sourceWidth, int sourceHeight, int sourceRotation) {
@@ -405,6 +432,46 @@ public class RNCameraView extends CameraView implements LifecycleEventListener, 
   private void setupBarcodeDetector() {
     mGoogleBarcodeDetector = new RNBarcodeDetector(mThemedReactContext);
     mGoogleBarcodeDetector.setBarcodeType(mGoogleVisionBarCodeType);
+  }
+
+  private void setupFirebaseVisionBarcodeDetector() {
+    int numberOfFormats = mFirebaseBarCodeTypes.size();
+    int[] barCodeFormats = new int[numberOfFormats > 0 ? numberOfFormats : 1];
+    if (numberOfFormats == 0) {
+      barCodeFormats[0] = FirebaseVisionBarcode.FORMAT_ALL_FORMATS;
+    } else {
+      for (int i = 0; i < numberOfFormats; i++) {
+        barCodeFormats[i] = mFirebaseBarCodeTypes.get(i).intValue();
+      }
+    }
+    FirebaseVisionBarcodeDetectorOptions options =
+      new FirebaseVisionBarcodeDetectorOptions.Builder()
+        .setBarcodeFormats(barCodeFormats[0], barCodeFormats)
+        .build();
+    mFirebaseVisionBarcodeDetector = FirebaseVision.getInstance()
+      .getVisionBarcodeDetector(options);
+  }
+
+  public void onFirebaseVisionBarcodesDetected(List<FirebaseVisionBarcode> barcodesReported) {
+    if (!mShouldFirebaseVisionDetectBarcodes) {
+      return;
+    }
+
+    List<FirebaseVisionBarcode> barcodesDetected = barcodesReported == null ? new ArrayList<FirebaseVisionBarcode>() : barcodesReported;
+
+    RNCameraViewHelper.emitFirebaseVisionBarcodesDetectedEvent(this, barcodesDetected);
+  }
+
+  public void onFirebaseVisionBarcodeDetectionError(FirebaseVisionBarcodeDetector barcodeDetector) {
+    if (!mShouldFirebaseVisionDetectBarcodes) {
+      return;
+    }
+
+    RNCameraViewHelper.emitFirebaseVisionBarcodeDetectionErrorEvent(this, barcodeDetector);
+  }
+
+  public void onFirebaseVisionBarcodeDetectingTaskCompleted() {
+    firebaseVisionBarcodeDetectorTaskLock = false;
   }
 
   /**

@@ -17,6 +17,8 @@ import com.google.android.cameraview.CameraView;
 import com.google.android.gms.vision.barcode.Barcode;
 import com.google.android.gms.vision.face.Face;
 import com.google.android.gms.vision.text.TextBlock;
+import com.google.firebase.ml.vision.barcode.FirebaseVisionBarcode;
+import com.google.firebase.ml.vision.barcode.FirebaseVisionBarcodeDetector;
 import com.google.zxing.Result;
 import org.reactnative.camera.events.*;
 import org.reactnative.camera.utils.ImageDimensions;
@@ -25,6 +27,7 @@ import org.reactnative.facedetector.RNFaceDetector;
 
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
+import java.util.List;
 
 public class RNCameraViewHelper {
 
@@ -221,7 +224,7 @@ public class RNCameraViewHelper {
     reactContext.getNativeModule(UIManagerModule.class).getEventDispatcher().dispatchEvent(event);
   }
 
-  // Barcode detection events
+  // Google Vision Barcode detection events
 
   public static void emitBarcodesDetectedEvent(
       ViewGroup view,
@@ -238,6 +241,27 @@ public class RNCameraViewHelper {
 
   public static void emitBarcodeDetectionErrorEvent(ViewGroup view, RNBarcodeDetector barcodeDetector) {
     BarcodeDetectionErrorEvent event = BarcodeDetectionErrorEvent.obtain(view.getId(), barcodeDetector);
+    ReactContext reactContext = (ReactContext) view.getContext();
+    reactContext.getNativeModule(UIManagerModule.class).getEventDispatcher().dispatchEvent(event);
+  }
+
+  // Firebase Vision Barcode detection events
+
+  public static void emitFirebaseVisionBarcodesDetectedEvent(
+          ViewGroup view,
+          List<FirebaseVisionBarcode> barcodes
+  ) {
+    FirebaseVisionBarcodesDetectedEvent event = FirebaseVisionBarcodesDetectedEvent.obtain(
+            view.getId(),
+            barcodes
+    );
+
+    ReactContext reactContext = (ReactContext) view.getContext();
+    reactContext.getNativeModule(UIManagerModule.class).getEventDispatcher().dispatchEvent(event);
+  }
+
+  public static void emitFirebaseVisionBarcodeDetectionErrorEvent(ViewGroup view, FirebaseVisionBarcodeDetector barcodeDetector) {
+    FirebaseVisionBarcodeDetectionErrorEvent event = FirebaseVisionBarcodeDetectionErrorEvent.obtain(view.getId(), barcodeDetector);
     ReactContext reactContext = (ReactContext) view.getContext();
     reactContext.getNativeModule(UIManagerModule.class).getEventDispatcher().dispatchEvent(event);
   }

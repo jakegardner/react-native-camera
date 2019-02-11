@@ -8,6 +8,7 @@
 #import <React/RCTLog.h>
 #import <React/RCTUtils.h>
 #import <React/UIView+React.h>
+#import <FirebaseMLVision/FirebaseMLVision.h>
 
 @implementation RNCameraManager
 
@@ -15,6 +16,7 @@ RCT_EXPORT_MODULE(RNCameraManager);
 RCT_EXPORT_VIEW_PROPERTY(onCameraReady, RCTDirectEventBlock);
 RCT_EXPORT_VIEW_PROPERTY(onMountError, RCTDirectEventBlock);
 RCT_EXPORT_VIEW_PROPERTY(onBarCodeRead, RCTDirectEventBlock);
+RCT_EXPORT_VIEW_PROPERTY(onFirebaseVisionBarcodesDetected, RCTDirectEventBlock);
 RCT_EXPORT_VIEW_PROPERTY(onFacesDetected, RCTDirectEventBlock);
 RCT_EXPORT_VIEW_PROPERTY(onPictureSaved, RCTDirectEventBlock);
 RCT_EXPORT_VIEW_PROPERTY(onTextRecognized, RCTDirectEventBlock);
@@ -67,6 +69,7 @@ RCT_EXPORT_VIEW_PROPERTY(onTextRecognized, RCTDirectEventBlock);
                      },
              @"VideoCodec": [[self class] validCodecTypes],
              @"BarCodeType" : [[self class] validBarCodeTypes],
+             @"FirebaseBarCodeType" : [[self class] validFirebaseBarCodeTypes],
              @"FaceDetection" : [[self class] faceDetectorConstants],
              @"VideoStabilization": [[self class] validVideoStabilizationModes]
              };
@@ -74,7 +77,7 @@ RCT_EXPORT_VIEW_PROPERTY(onTextRecognized, RCTDirectEventBlock);
 
 - (NSArray<NSString *> *)supportedEvents
 {
-    return @[@"onCameraReady", @"onMountError", @"onBarCodeRead", @"onFacesDetected", @"onPictureSaved", @"onTextRecognized"];
+    return @[@"onCameraReady", @"onMountError", @"onBarCodeRead", @"onFirebaseVisionBarcodesDetected", @"onFacesDetected", @"onPictureSaved", @"onTextRecognized"];
 }
 
 + (NSDictionary *)validCodecTypes
@@ -121,6 +124,25 @@ RCT_EXPORT_VIEW_PROPERTY(onTextRecognized, RCTDirectEventBlock);
              @"interleaved2of5" : AVMetadataObjectTypeInterleaved2of5Code,
              @"itf14" : AVMetadataObjectTypeITF14Code,
              @"datamatrix" : AVMetadataObjectTypeDataMatrixCode
+             };
+}
+
++ (NSDictionary *)validFirebaseBarCodeTypes
+{
+    return @{
+             @"upc_e" : [NSNumber numberWithInt:FIRVisionBarcodeFormatUPCE],
+             @"upc_a" : [NSNumber numberWithInt:FIRVisionBarcodeFormatUPCA],
+             @"code39" : [NSNumber numberWithInt:FIRVisionBarcodeFormatCode39],
+             @"ean13" : [NSNumber numberWithInt:FIRVisionBarcodeFormatEAN13],
+             @"ean8" : [NSNumber numberWithInt:FIRVisionBarcodeFormatEAN8],
+             @"code93" : [NSNumber numberWithInt:FIRVisionBarcodeFormatCode93],
+             @"code128" : [NSNumber numberWithInt:FIRVisionBarcodeFormatCode128],
+             @"codabar" : [NSNumber numberWithInt:FIRVisionBarcodeFormatCodaBar],
+             @"pdf417" : [NSNumber numberWithInt:FIRVisionBarcodeFormatPDF417],
+             @"qr" : [NSNumber numberWithInt:FIRVisionBarcodeFormatQRCode],
+             @"aztec" : [NSNumber numberWithInt:FIRVisionBarcodeFormatAztec],
+             @"itf14" : [NSNumber numberWithInt:FIRVisionBarcodeFormatITF],
+             @"datamatrix" : [NSNumber numberWithInt:FIRVisionBarcodeFormatDataMatrix]
              };
 }
 
@@ -232,9 +254,20 @@ RCT_CUSTOM_VIEW_PROPERTY(barCodeScannerEnabled, BOOL, RNCamera)
     [view setupOrDisableBarcodeScanner];
 }
 
+RCT_CUSTOM_VIEW_PROPERTY(firebaseVisionBarcodeDetectorEnabled, BOOL, RNCamera)
+{
+    view.isDetectingBarCodes = [RCTConvert BOOL:json];
+    [view setupOrDisableFirebaseVision];
+}
+
 RCT_CUSTOM_VIEW_PROPERTY(barCodeTypes, NSArray, RNCamera)
 {
     [view setBarCodeTypes:[RCTConvert NSArray:json]];
+}
+
+RCT_CUSTOM_VIEW_PROPERTY(firebaseBarCodeTypes, NSArray, RNCamera)
+{
+    [view setFirebaseBarCodeTypes:[RCTConvert NSArray:json]];
 }
 
 RCT_CUSTOM_VIEW_PROPERTY(textRecognizerEnabled, BOOL, RNCamera)
